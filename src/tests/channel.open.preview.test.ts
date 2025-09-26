@@ -1,27 +1,37 @@
-// run:  npx tsx src/tests/channel.open.preview.test.ts
-
-import { connectWallet } from '@/adapters/wallet/WalletClient'
-import { openChannelPreview } from '@/channel'
+// run:  npm run test:open:preview
+import { connectWallet, getIdentityKey, getNetwork } from "@/adapters/wallet/WalletClient";
+import { openChannelPreview } from "@/channel/open";
+import { normalizePubKeyHex, make2of2AsmDeterministic, make2of2HexFromAsm, parseTwoKeysFromAsm } from "@/channel/keyUtils";
 
 async function main() {
-  // ensure wallet substrate is connected (Metanet Desktop must be running)
-  await connectWallet()
+  await connectWallet();
 
-  const theirIdentityKey =
-    process.env.DRAIGFI_COUNTERPARTY_ID_KEY?.trim() ||
-    '02cd23ba2e7dcd996ce4bcf1d40c5390db43525f377befe4a87db5e03524f79b6f'
+  const [me, net] = await Promise.all([getIdentityKey(), getNetwork()]);
+  const theirRaw = process.env.DRAIGFI_COUNTERPARTY_ID_KEY ?? "";
+  const their = normalizePubKeyHex(theirRaw);
 
-  const preview = await openChannelPreview({ theirIdentityKey })
+  const preview = await openChannelPreview({ theirIdentityKey: their });
 
-  console.log('network :', preview.network)
-  console.log('✅ openChannelPreview:')
-  console.log('  channelId      :', preview.channelId)
-  console.log('  ourIdentityKey :', preview.ourIdentityKey)
-  console.log('  theirIdentityKey:', preview.theirIdentityKey)
-  console.log('  lockingScript  :', preview.lockingScriptAsm)
+  console.log("network :", typeof net === "string" ? net : net.network);
+  console.log("✅ openChannelPreview:");
+  console.log("  channelId      :", preview.channelId);
+  console.log("  ourIdentityKey :", me);
+  console.log("  theirIdentityKey(raw) :", theirRaw);
+  console.log("  theirIdentityKey(norm):", their);
+
+  // our deterministic ASM/HEX (for comparison in other tests)
+  const detAsm = make2of2AsmDeterministic(me, their);
+  const detHex = make2of2HexFromAsm(detAsm);
+  console.log("  deterministic ASM :", detAsm);
+  console.log("  deterministic HEX :", detHex);
+  console.log("  preview ASM        :", preview.lockingScriptAsm);
+  console.log("  preview HEX        :", preview.lockingScriptHex);
+
+  const detKeys = parseTwoKeysFromAsm(detAsm);
+  console.log("  keys(det order)    :", detKeys?.join(" , "));
 }
 
 main().catch(err => {
-  console.error('preview test failed:', err?.message ?? err)
-  process.exit(1)
-})
+  console.error("preview test failed:", err?.message ?? err);
+  process.exit(1);
+});

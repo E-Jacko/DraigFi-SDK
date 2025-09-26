@@ -11,6 +11,8 @@
     "test:open:fund": "tsx src/tests/channel.open.fund.test.ts",
     "test:refund:preview": "tsx src/tests/channel.refund.preview.test.ts",
     "test:wallet:basket": "tsx src/tests/wallet.basket.check.test.ts",
+    "test:close:preview": "tsx src/tests/channel.close.preview.test.ts",
+  "test:refund:spend:preview": "tsx src/tests/channel.refund.spend.preview.test.ts",
     "dev:wallet": "tsx watch src/tests/wallet.connect.test.ts"
   },
   "dependencies": {

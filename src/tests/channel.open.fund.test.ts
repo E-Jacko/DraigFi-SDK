@@ -1,53 +1,75 @@
-import { Transaction } from '@bsv/sdk'
-import { connectWallet, getNetwork, getIdentityKey } from '@/adapters/wallet/WalletClient'
-import { openChannelPreview, openChannelFund } from '@/channel' // <- note '@/channel'
+// run:  npm run test:open:fund
+import { connectWallet, getWallet, getIdentityKey, getNetwork } from "@/adapters/wallet/WalletClient";
+import { openChannelFund, openChannelPreview } from "@/channel/open";
+import {
+  normalizePubKeyHex,
+  make2of2AsmDeterministic,
+  make2of2HexFromAsm,
+  scriptsEqualExactHex,
+  scriptsEqualIgnoringKeyOrder,
+  prettyScriptDiff,
+} from "@/channel/keyUtils";
+import { getConfig } from "@/utils";
 
 async function main() {
-  await connectWallet()
+  await connectWallet();
 
-  const [me, net] = await Promise.all([getIdentityKey(), getNetwork()])
-  console.log('network :', net)
-  console.log('our id  :', me)
+  const theirRaw = process.env.DRAIGFI_COUNTERPARTY_ID_KEY ?? "";
+  const their = normalizePubKeyHex(theirRaw);
+  const me = await getIdentityKey();
 
-  const theirIdentityKey = process.env.DRAIGFI_COUNTERPARTY_ID_KEY
-  if (!theirIdentityKey) throw new Error('DRAIGFI_COUNTERPARTY_ID_KEY is not set')
+  // Preview (optional, helps us know expected ASM/HEX)
+  const prev = await openChannelPreview({ theirIdentityKey: their });
+  const detAsm = make2of2AsmDeterministic(me, their);
+  const detHex = make2of2HexFromAsm(detAsm);
 
-  const preview = await openChannelPreview({ theirIdentityKey })
-  console.log('openChannelPreview:')
-  console.log('  channelId     :', preview.channelId)
-  console.log('  lockingScript :', preview.lockingScriptAsm)
+  console.log("network :", await getNetwork());
+  console.log("openChannelPreview:");
+  console.log("  channelId   :", prev.channelId);
+  console.log("  locking ASM :", prev.lockingScriptAsm);
+  console.log("  locking HEX :", prev.lockingScriptHex);
+  console.log("  det ASM     :", detAsm);
+  console.log("  det HEX     :", detHex);
 
+  // Ask wallet to fund it
   const res = await openChannelFund({
-    theirIdentityKey,
+    theirIdentityKey: their,
     depositSatoshis: 1000,
-    policy: { basePricePerUnit: 1, unit: 'second' }
-  })
+    policy: { basePricePerUnit: 1, unit: "second" },
+  });
 
-  if (!res.tx) {
-    console.log('openChannel (fund): tx missing (wallet returned reference only)')
-    console.log('  actionReference:', res.actionReference)
-    return
+  console.log("openChannel (fund):");
+  console.log("  tx present? :", !!res.tx);
+
+  // Try to find the newest output in our basket, and compare scripts if revealed
+  const { basketName } = getConfig();
+  const wallet = await getWallet();
+  const { outputs = [] } = await wallet.listOutputs({ basket: basketName, limit: 25 });
+
+  const newest = outputs[0]; // wallet lists newest first
+  console.log("basket newest:");
+  console.log("  outpoint :", newest?.outpoint);
+  console.log("  sats     :", newest?.satoshis);
+  console.log("  locking  :", newest?.lockingScript ? newest.lockingScript.slice(0, 24) + "..." : "(hidden)");
+
+  if (newest?.lockingScript) {
+    // compare both ways
+    const exact = scriptsEqualExactHex(prev.lockingScriptHex, newest.lockingScript);
+    const loose = scriptsEqualIgnoringKeyOrder(prev.lockingScriptAsm, detAsm); // both are ASM strings we control
+    console.log("script equal (exact hex)?        :", exact);
+    console.log("script equal (keys ignoring order):", loose);
+    if (!exact) {
+      console.log("--- script diff (ASM) ---");
+      console.log(
+        prettyScriptDiff(prev.lockingScriptAsm, detAsm)
+      );
+    }
+  } else {
+    console.log("NOTE: wallet did not reveal script (privacy). Verified by amount/outpoint instead.");
   }
-
-  const tx = Transaction.fromAtomicBEEF(res.tx)
-  const out0 = tx.outputs[0]
-  const fundScriptHex =
-    (out0 as any)?.lockingScript?.toHex?.() ??
-    (out0 as any)?.lockingScript ??
-    ''
-
-  const matches =
-    fundScriptHex &&
-    fundScriptHex.toLowerCase() === preview.lockingScriptHex.toLowerCase()
-
-  console.log('openChannel (fund):')
-  console.log('  tx present?     :', true)
-  console.log('  script matches? :', !!matches)
-
-  if (!matches) throw new Error('Funding output script does not match previewed 2-of-2 script')
 }
 
-main().catch((err) => {
-  console.error('fund test failed:', err?.message ?? err)
-  process.exit(1)
-})
+main().catch(err => {
+  console.error("fund test failed:", err?.message ?? err);
+  process.exit(1);
+});

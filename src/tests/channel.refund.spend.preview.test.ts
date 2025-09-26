@@ -1,7 +1,7 @@
 import { Transaction } from '@bsv/sdk'
 import { connectWallet } from '@/adapters/wallet/WalletClient'
 import { openChannelPreview, openChannelFund } from '@/channel/open'
-import { refundPreview } from '@/channel/refund'
+import { refundSpendPreview } from '@/channel/refund'
 
 async function main() {
   await connectWallet()
@@ -18,7 +18,7 @@ async function main() {
   })
 
   if (!funded.tx) {
-    console.log('ℹ️ need tx to preview refund; got reference:', funded.actionReference)
+    console.log('ℹ️ need tx to preview refund spend; got reference:', funded.actionReference)
     return
   }
 
@@ -26,19 +26,19 @@ async function main() {
   const vout = 0
   const out0 = tx.outputs[vout]
   const satoshis = Number(out0.satoshis ?? 0)
-  const lockTimeSeconds = Number(process.env.DRAIGFI_REFUND_LOCK_S ?? 600)
 
   const args = {
     fundingTx: funded.tx,
     input: { vout, satoshis, lockingScriptHex: preview.lockingScriptHex },
-    lockTimeSeconds
+    feeRate: Number(process.env.DRAIGFI_FEE_RATE ?? 1),
+    lockTimeSeconds: Number(process.env.DRAIGFI_REFUND_LOCK_S ?? 600)
   } as any
 
-  const r: any = await refundPreview(args)
-  console.log('✅ refundPreview:', r)
+  const spend: any = await refundSpendPreview(args)
+  console.log('✅ refundSpendPreview:', spend)
 }
 
 main().catch(err => {
-  console.error('refund preview failed:', err?.message ?? err)
+  console.error('refund spend preview failed:', err?.message ?? err)
   process.exit(1)
 })
