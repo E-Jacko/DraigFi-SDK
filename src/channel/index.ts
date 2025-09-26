@@ -4,15 +4,10 @@
    import { openChannelPreview, openChannelFund, refundPreview } from '@/channel'
 */
 
-// types
 export * from './types'
+export * from './open'
+export * from './refund'
 
-// open / fund
-export { openChannelPreview, openChannelFund, openChannel } from './open'
-
-// refund (preview)
-export { refundPreview } from './refund'
-
-// placeholders for upcoming phases (export to stabilize API)
-export { buildAndSendUpdate } from './update'
-export { cooperativeClose, refundClose } from './close'
+// placeholders — implemented in Phase 2B/3
+export * from './update'
+export * from './close'
