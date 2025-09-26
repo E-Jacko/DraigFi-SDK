@@ -1,7 +1,7 @@
 // run:  npx tsx src/tests/channel.refund.preview.test.ts
 
 import { connectWallet } from '@/adapters/wallet/WalletClient'
-import { openChannelFund, openChannelPreview, refundPreview } from '@/channel/api'
+import { openChannelFund, openChannelPreview, refundPreview } from '@/channel'
 
 async function main() {
   await connectWallet()

@@ -1,38 +1,50 @@
+import { Transaction } from '@bsv/sdk'
 import { connectWallet, getNetwork, getIdentityKey } from '@/adapters/wallet/WalletClient'
-import { openChannel } from '@/channel/api'
+import { openChannelPreview, openChannelFund } from '@/channel' // <- note '@/channel'
 
 async function main() {
-  // ensure wallet session
   await connectWallet()
 
-  // show context
   const [me, net] = await Promise.all([getIdentityKey(), getNetwork()])
   console.log('network :', net)
   console.log('our id  :', me)
 
-  // counterparty (second actor) – set in shell before running:
-  // export DRAIGFI_COUNTERPARTY_ID_KEY=<their_everyday_identity_key>
   const theirIdentityKey = process.env.DRAIGFI_COUNTERPARTY_ID_KEY
   if (!theirIdentityKey) throw new Error('DRAIGFI_COUNTERPARTY_ID_KEY is not set')
 
-  // 1) preview (keys only; no amount here)
-  const preview = await openChannel.preview({
-    theirIdentityKey
-  })
-
+  const preview = await openChannelPreview({ theirIdentityKey })
   console.log('openChannelPreview:')
-  console.log('  channelId      :', preview.channelId)
-  console.log('  lockingScript  :', preview.lockingScriptAsm)
+  console.log('  channelId     :', preview.channelId)
+  console.log('  lockingScript :', preview.lockingScriptAsm)
 
-  // 2) fund with 1,000 sats (policy included here)
-  const res = await openChannel.fund({
+  const res = await openChannelFund({
     theirIdentityKey,
     depositSatoshis: 1000,
     policy: { basePricePerUnit: 1, unit: 'second' }
   })
 
+  if (!res.tx) {
+    console.log('openChannel (fund): tx missing (wallet returned reference only)')
+    console.log('  actionReference:', res.actionReference)
+    return
+  }
+
+  const tx = Transaction.fromAtomicBEEF(res.tx)
+  const out0 = tx.outputs[0]
+  const fundScriptHex =
+    (out0 as any)?.lockingScript?.toHex?.() ??
+    (out0 as any)?.lockingScript ??
+    ''
+
+  const matches =
+    fundScriptHex &&
+    fundScriptHex.toLowerCase() === preview.lockingScriptHex.toLowerCase()
+
   console.log('openChannel (fund):')
-  console.log('  tx present?     :', !!res.tx)
+  console.log('  tx present?     :', true)
+  console.log('  script matches? :', !!matches)
+
+  if (!matches) throw new Error('Funding output script does not match previewed 2-of-2 script')
 }
 
 main().catch((err) => {

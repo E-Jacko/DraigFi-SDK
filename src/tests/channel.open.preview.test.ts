@@ -1,7 +1,7 @@
 // run:  npx tsx src/tests/channel.open.preview.test.ts
 
 import { connectWallet } from '@/adapters/wallet/WalletClient'
-import { openChannelPreview } from '@/channel/api'
+import { openChannelPreview } from '@/channel'
 
 async function main() {
   // ensure wallet substrate is connected (Metanet Desktop must be running)
